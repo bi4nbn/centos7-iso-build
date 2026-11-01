@@ -1,0 +1,32 @@
+#!/bin/bash
+# 一键硬件信息巡检(整机 / CPU / 内存槽位 / 硬盘 SN / 网卡) → /var/log/edge-hardware.txt
+OUT=/var/log/edge-hardware.txt; QUIET=0
+for a in "$@"; do case "$a" in -q) QUIET=1;; esac; done
+exec > >(tee "$OUT") 2>&1
+echo "===== EDGE 硬件巡检 $(date '+%F %T') ====="
+echo "--- 整机 ---"
+[ -r /sys/class/dmi/id/product_name ] && echo "Model : $(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+echo "Serial: $(cat /sys/class/dmi/id/product_serial 2>/dev/null)"
+echo "BIOS  : $(cat /sys/class/dmi/id/bios_version 2>/dev/null) / $(cat /sys/class/dmi/id/bios_date 2>/dev/null)"
+echo "Boot  : $( [ -d /sys/firmware/efi ] && echo UEFI || echo Legacy-BIOS )"
+echo "Kernel: $(uname -r)"
+echo "--- CPU ---"
+awk -F': ' '/model name/{print "CPU: "$2; exit}' /proc/cpuinfo
+echo "Cores: $(grep -c ^processor /proc/cpuinfo)"
+echo "--- 内存(已插槽位)---"
+command -v dmidecode >/dev/null 2>&1 && dmidecode -t memory 2>/dev/null | awk '/Size: [0-9]/{print "  "$0} /Locator:/{l=$0} /Speed: [0-9]/{print "  "l" / "$0}' | head -24
+echo "  Total: $(free -h | awk '/Mem:/{print $2}')"
+echo "--- 硬盘 ---"
+for d in $(lsblk -ldno name,type 2>/dev/null | awk '$2=="disk"{print $1}'); do
+  sz=$(lsblk -dno size /dev/$d 2>/dev/null); mdl=$(cat /sys/block/$d/device/model 2>/dev/null | tr -s ' ')
+  sn=$(cat /sys/block/$d/device/serial 2>/dev/null || udevadm info --query=property --name=/dev/$d 2>/dev/null | awk -F= '/ID_SERIAL_SHORT=/{print $2}')
+  printf "  %-8s %-9s %-22s SN=%s\n" "$d" "$sz" "${mdl:-?}" "${sn:-?}"
+done
+echo "--- 网卡 ---"
+for n in $(ls /sys/class/net | grep -v '^lo'); do
+  drv=$(basename "$(readlink -f /sys/class/net/$n/device/driver 2>/dev/null)" 2>/dev/null)
+  sp=$(cat /sys/class/net/$n/speed 2>/dev/null); mac=$(cat /sys/class/net/$n/address 2>/dev/null)
+  printf "  %-10s %-8s %-10s %s\n" "$n" "${drv:-?}" "$( [ "$sp" -ge 1 ] 2>/dev/null && echo "${sp}Mb/s" || echo "-" )" "$mac"
+done
+echo "--- 分区 ---"; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT 2>/dev/null
+echo "报告已保存: $OUT"

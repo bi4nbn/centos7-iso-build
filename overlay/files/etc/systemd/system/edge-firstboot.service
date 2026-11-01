@@ -1,0 +1,13 @@
+[Unit]
+Description=EDGE first-boot check & install report
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/sbin/edge-firstboot.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edge-firstboot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

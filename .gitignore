@@ -1,0 +1,15 @@
+# 构建产物与本地产物
+.build/
+*.iso
+*.iso.part
+out/
+
+# 二进制:本仓库不分发内核 / 阵列卡 rpm / linux-tty 二进制
+optional/linux-tty/usr/local/sbin/linux-tty
+optional/vendor-rpm/tmp/*.rpm
+optional/vendor-rpm/**/*.rpm
+
+# 系统垃圾
+.DS_Store
+*.swp
+*.ppm
